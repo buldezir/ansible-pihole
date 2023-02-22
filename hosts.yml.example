@@ -1,0 +1,14 @@
+---
+pihole:
+    hosts:
+        dns1:
+            ansible_host: 192.168.1.111
+        dns2:
+            ansible_host: 192.168.1.222
+    vars:
+        ansible_user: root
+        custom_hosts: |
+            192.168.1.1 gateway
+        custom_zones: |
+            address=/.local/127.0.0.1
+            address=/.lan/192.168.1.1

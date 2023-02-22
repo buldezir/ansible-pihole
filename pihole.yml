@@ -1,0 +1,70 @@
+---
+- name: Install and configure Pi-Hole
+  hosts: pihole
+  become: true
+  tasks:
+      - name: Checking if Pi-Hole is already installed
+        ansible.builtin.stat:
+            path: "/usr/local/bin/pihole"
+        register: pihole_binary
+
+      - name: Fact pihole_installed
+        ansible.builtin.set_fact:
+            pihole_installed: "{{ pihole_binary.stat.exists | default(false) }}"
+
+      - name: Create Configuration directories
+        when: not pihole_installed
+        loop:
+            - /etc/pihole/
+            - /etc/dnsmasq.d/
+        ansible.builtin.file:
+            path: "{{ item }}"
+            state: directory
+            owner: "root"
+            group: "root"
+            mode: 0755
+
+      - name: Prepare Pi-Hole configuration
+        notify: reconfigure pihole
+        ansible.builtin.template:
+            src: "setupVars.conf.j2"
+            dest: "/etc/pihole/setupVars.conf"
+            owner: root
+            group: root
+            mode: 0644
+
+      - name: Create addn-hosts file for dnsmasq
+        notify: restart pihole
+        ansible.builtin.copy:
+            content: "{{ custom_hosts }}\n"
+            dest: /etc/pihole/custom.list
+            mode: 0644
+
+      - name: Create wildcard file for dnsmasq
+        notify: restart pihole
+        ansible.builtin.copy:
+            content: "{{ custom_zones }}\n"
+            dest: /etc/dnsmasq.d/02-homenet.conf
+            mode: 0644
+
+      - name: Download installer
+        when: not pihole_installed
+        ansible.builtin.get_url:
+            url: https://install.pi-hole.net
+            dest: /root/basic-install.sh
+            mode: 0744
+
+      - name: Run Pi-Hole install script
+        when: not pihole_installed
+        ansible.builtin.shell: "/root/basic-install.sh --unattended > /root/pihole_install.log"
+
+  handlers:
+      - name: Restart Pi-Hole DNS resolver
+        listen: restart pihole
+        ansible.builtin.systemd:
+            name: pihole-FTL.service
+            state: restarted
+
+      - name: Run Pi-Hole update script
+        listen: reconfigure pihole
+        ansible.builtin.shell: "/root/basic-install.sh --unattended > /root/pihole_update.log"
